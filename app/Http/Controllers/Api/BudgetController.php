@@ -24,11 +24,22 @@ class BudgetController extends Controller
     public function index(Request $request)
     {
         $month = Carbon::parse($request->input('month', now()->toDateString()));
+        $search = $request->input('search');
+        $perPage = (int) $request->input('per_page', 10);
 
-        return ['month' => $month->format('Y-m'), 'envelopes' => $this->budgets->envelopesForOrganization(
+        $result = $this->budgets->envelopesForOrganizationPaginated(
             $request->user()->current_org_id,
             $month,
-        )];
+            $search,
+            $perPage,
+        );
+
+        return [
+            'month' => $month->format('Y-m'),
+            'data' => $result['data'],
+            'has_more' => $result['has_more'],
+            'next_page' => $result['next_page'],
+        ];
     }
 
     public function store(AllocateBudgetRequest $request)

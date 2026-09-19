@@ -24,9 +24,10 @@ class ReportController extends Controller
 
     public function ledger(Request $request)
     {
-        $months = (int) $request->input('months', 3);
+        $page = (int) $request->input('page', 1);
+        $perPage = (int) $request->input('per_page', 10);
 
-        return ['months' => $this->reports->ledger($request->user()->current_org_id, $months)];
+        return $this->reports->ledger($request->user()->current_org_id, $page, $perPage);
     }
 
     /**

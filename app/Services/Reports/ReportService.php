@@ -4,6 +4,7 @@ namespace App\Services\Reports;
 
 use App\Repositories\Contracts\ExpenseRepositoryInterface;
 use App\Repositories\Contracts\IncomeRepositoryInterface;
+use App\Repositories\Contracts\OrganizationRepositoryInterface;
 use App\Services\Budgeting\BudgetService;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Collection;
@@ -14,14 +15,10 @@ class ReportService
         private readonly IncomeRepositoryInterface $incomes,
         private readonly ExpenseRepositoryInterface $expenses,
         private readonly BudgetService $budgets,
+        private readonly OrganizationRepositoryInterface $organizations,
     ) {
     }
 
-    /**
-     * Everything the Dashboard and the PDF/print report both need for one
-     * month — the same envelopes BudgetService computes for the live UI, so
-     * the printed report can never disagree with the on-screen totals.
-     */
     public function summaryForMonth(int $organizationId, Carbon $month): array
     {
         $envelopes = $this->budgets->envelopesForOrganization($organizationId, $month);
@@ -41,13 +38,25 @@ class ReportService
     }
 
     /**
-     * The month-over-month ledger: income vs. expense totals for each of
-     * the last N months, most recent first.
+     * Paginated month-over-month ledger — page 1 is the most recent
+     * $perPage months, page 2 the $perPage months before that, and so on,
+     * going no further back than the organization's own creation date
+     * (nothing to show before the org existed).
+     *
+     * @return array{data: Collection, has_more: bool, next_page: ?int}
      */
-    public function ledger(int $organizationId, int $months = 3): Collection
+    public function ledger(int $organizationId, int $page = 1, int $perPage = 10): array
     {
-        $to = now()->startOfMonth();
-        $from = $to->copy()->subMonths($months - 1);
+        $organization = $this->organizations->findOrFail($organizationId);
+        $orgStart = Carbon::parse($organization->created_at)->startOfMonth();
+
+        $to = now()->startOfMonth()->subMonths(($page - 1) * $perPage);
+        $from = $to->copy()->subMonths($perPage - 1);
+
+        $hasMore = $from->gt($orgStart);
+        if ($from->lt($orgStart)) {
+            $from = $orgStart->copy();
+        }
 
         $incomeByMonth = $this->incomes->totalsForOrganizationByMonth($organizationId, $from, $to)
             ->keyBy(fn ($row) => Carbon::parse($row->month)->format('Y-m'));
@@ -69,6 +78,10 @@ class ReportService
             ]);
         }
 
-        return $rows;
+        return [
+            'data' => $rows,
+            'has_more' => $hasMore,
+            'next_page' => $hasMore ? $page + 1 : null,
+        ];
     }
 }

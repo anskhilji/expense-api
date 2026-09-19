@@ -47,11 +47,15 @@ class CategoryService
 
     public function delete(Category $category): bool
     {
-        if ($category->expenses()->exists() || $category->budgetAllocations()->exists()) {
+        if ($category->expenses()->exists()) {
             throw ValidationException::withMessages([
-                'category' => "This category has expenses or a budget allocation tied to it and can't be deleted. Remove those first.",
+                'category' => "This category has expenses logged against it and can't be deleted. Remove those first.",
             ]);
         }
+
+        // An allocation with no expenses against it is just unused budget —
+        // safe to clear out along with the category, nothing to lose.
+        $category->budgetAllocations()->delete();
 
         return $this->categories->delete($category);
     }

@@ -18,9 +18,16 @@ class MemberController extends Controller
     /** Admin-only (permission:organization.manage) — every user in the current org and their role. */
     public function index(Request $request)
     {
-        return MemberResource::collection(
-            $this->members->listMembers($request->user()->currentOrganization)
-        );
+        $search = $request->input('search');
+        $perPage = (int) $request->input('per_page', 10);
+
+        $result = $this->members->listMembersPaginated($request->user()->currentOrganization, $search, $perPage);
+
+        return [
+            'data' => MemberResource::collection($result['data']),
+            'has_more' => $result['has_more'],
+            'next_page' => $result['next_page'],
+        ];
     }
 
     public function update(ChangeMemberRoleRequest $request, int $user)

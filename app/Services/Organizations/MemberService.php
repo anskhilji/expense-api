@@ -104,4 +104,19 @@ class MemberService
                 ->where('user_id', $userId)
                 ->exists();
     }
+
+        /**
+     * Paginated + searchable version for the Members page, matching the
+     * Expenses/Incomes/Budgets pagination shape.
+     */
+    public function listMembersPaginated(Organization $organization, ?string $search, int $perPage = 10): array
+    {
+        $membersPage = $this->organizations->membersOfPaginated($organization, $search, $perPage);
+
+        return [
+            'data' => collect($membersPage->items()),
+            'has_more' => $membersPage->hasMorePages(),
+            'next_page' => $membersPage->hasMorePages() ? $membersPage->currentPage() + 1 : null,
+        ];
+    }
 }

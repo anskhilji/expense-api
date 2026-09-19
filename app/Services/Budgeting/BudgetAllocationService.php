@@ -16,7 +16,13 @@ class BudgetAllocationService
     ) {
     }
 
-    public function allocate(int $organizationId, int $categoryId, string $month, float $amount): BudgetAllocation
+    /**
+     * The amount passed in is a TOP-UP, not a replacement — logging 2000
+     * against a category already allocated 1000 results in a 3000 total.
+     * This is what makes "add more budget to Gas mid-month" work without
+     * the admin having to know or re-type the current total first.
+     */
+    public function allocate(int $organizationId, int $categoryId, string $month, float $amountToAdd): BudgetAllocation
     {
         $category = $this->categories->findOrFail($categoryId);
 
@@ -28,6 +34,10 @@ class BudgetAllocationService
             ]);
         }
 
-        return $this->allocations->setAllocation($organizationId, $categoryId, Carbon::parse($month), $amount);
+        $monthDate = Carbon::parse($month);
+        $existing = $this->allocations->findForCategoryAndMonth($categoryId, $monthDate);
+        $newTotal = (float) ($existing?->allocated_amount ?? 0) + $amountToAdd;
+
+        return $this->allocations->setAllocation($organizationId, $categoryId, $monthDate, $newTotal);
     }
 }

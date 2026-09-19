@@ -31,6 +31,10 @@ class BudgetService
      * in the given month, so a category doesn't disappear from the
      * dashboard just because nothing was allocated to it yet.
      *
+     * Kept as-is (loads every category, unpaginated) — this is what the
+     * dashboard's Category envelope cards use, where showing the whole
+     * set at once is fine.
+     *
      * @return Collection<int, array{category_id:int, category_name:string, icon:?string, allocated:float, spent:float, remaining:float}>
      */
     public function envelopesForOrganization(int $organizationId, Carbon $month): Collection
@@ -54,6 +58,45 @@ class BudgetService
                 'remaining' => round($allocated - $spent, 2),
             ];
         })->values();
+    }
+
+    /**
+     * Paginated + searchable version for the Budgets listing page — same
+     * envelope formula, but only builds envelopes for the categories on
+     * the requested page. Matches the Expenses/Incomes pagination shape
+     * (has_more / next_page) so the frontend can reuse the same
+     * useInfiniteQuery pattern.
+     *
+     * @return array{data: Collection, has_more: bool, next_page: ?int}
+     */
+    public function envelopesForOrganizationPaginated(int $organizationId, Carbon $month, ?string $search, int $perPage = 10): array
+    {
+        $categoriesPage = $this->categories->searchPaginated($organizationId, $search, $perPage);
+
+        $allocations = $this->allocations->forOrganizationInMonth($organizationId, $month)
+            ->keyBy('category_id');
+        $spentByCategory = $this->expenses->totalsByCategoryInMonth($organizationId, $month)
+            ->keyBy('category_id');
+
+        $envelopes = collect($categoriesPage->items())->map(function ($category) use ($allocations, $spentByCategory) {
+            $allocated = (float) ($allocations->get($category->id)?->allocated_amount ?? 0);
+            $spent = (float) ($spentByCategory->get($category->id)?->total ?? 0);
+
+            return [
+                'category_id' => $category->id,
+                'category_name' => $category->name,
+                'icon' => $category->icon,
+                'allocated' => $allocated,
+                'spent' => $spent,
+                'remaining' => round($allocated - $spent, 2),
+            ];
+        })->values();
+
+        return [
+            'data' => $envelopes,
+            'has_more' => $categoriesPage->hasMorePages(),
+            'next_page' => $categoriesPage->hasMorePages() ? $categoriesPage->currentPage() + 1 : null,
+        ];
     }
 
     /**
