@@ -70,6 +70,7 @@ Route::middleware(['auth:sanctum', 'blocked'])->group(function () {
     // --- Budgets (envelope allocations) ---
     Route::get('/budgets', [BudgetController::class, 'index'])->middleware('permission:expenses.view');
     Route::post('/budgets', [BudgetController::class, 'store'])->middleware('permission:budgets.manage');
+    Route::put('/budgets', [BudgetController::class, 'update'])->middleware('permission:budgets.manage');
 
     // --- Expenses ---
     Route::get('/expenses', [ExpenseController::class, 'index'])->middleware('permission:expenses.view');

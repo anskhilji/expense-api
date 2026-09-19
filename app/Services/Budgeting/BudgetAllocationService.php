@@ -5,6 +5,7 @@ namespace App\Services\Budgeting;
 use App\Models\BudgetAllocation;
 use App\Repositories\Contracts\BudgetAllocationRepositoryInterface;
 use App\Repositories\Contracts\CategoryRepositoryInterface;
+use App\Repositories\Contracts\ExpenseRepositoryInterface;
 use Illuminate\Support\Carbon;
 use Illuminate\Validation\ValidationException;
 
@@ -13,8 +14,8 @@ class BudgetAllocationService
     public function __construct(
         private readonly BudgetAllocationRepositoryInterface $allocations,
         private readonly CategoryRepositoryInterface $categories,
-    ) {
-    }
+        private readonly ExpenseRepositoryInterface $expenses,
+    ) {}
 
     /**
      * The amount passed in is a TOP-UP, not a replacement — logging 2000
@@ -37,6 +38,28 @@ class BudgetAllocationService
         $monthDate = Carbon::parse($month);
         $existing = $this->allocations->findForCategoryAndMonth($categoryId, $monthDate);
         $newTotal = (float) ($existing?->allocated_amount ?? 0) + $amountToAdd;
+
+        return $this->allocations->setAllocation($organizationId, $categoryId, $monthDate, $newTotal);
+    }
+
+    public function replace(int $organizationId, int $categoryId, string $month, float $newTotal): BudgetAllocation
+    {
+        $category = $this->categories->findOrFail($categoryId);
+
+        if ($category->organization_id !== $organizationId) {
+            throw ValidationException::withMessages([
+                'category_id' => 'That category does not belong to your organization.',
+            ]);
+        }
+
+        $monthDate = Carbon::parse($month);
+        $spent = $this->expenses->totalForCategoryInMonth($categoryId, $monthDate);
+
+        if ($newTotal < $spent) {
+            throw ValidationException::withMessages([
+                'allocated_amount' => 'The allocation cannot be lower than the amount already spent in this category for the selected month.',
+            ]);
+        }
 
         return $this->allocations->setAllocation($organizationId, $categoryId, $monthDate, $newTotal);
     }
